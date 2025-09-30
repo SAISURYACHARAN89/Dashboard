@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard Configuration</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 20px auto;
+        padding: 20px;
+        background: #1a1a1a;
+        color: #fff;
+      }
+
+      .container {
+        background: #2d2d2d;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      }
+
+      .form-group {
+        margin-bottom: 20px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: bold;
+        color: #3498db;
+      }
+
+      input,
+      textarea {
+        width: 100%;
+        padding: 10px;
+        background: #333;
+        border: 1px solid #444;
+        border-radius: 4px;
+        color: #fff;
+        font-size: 14px;
+      }
+
+      textarea {
+        height: 150px;
+        font-family: monospace;
+      }
+
+      .required {
+        color: #e74c3c;
+      }
+
+      .optional {
+        color: #7f8c8d;
+        font-size: 0.9em;
+      }
+
+      button {
+        background: #3498db;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      button:hover {
+        background: #2980b9;
+      }
+
+      #status {
+        margin-top: 15px;
+        padding: 10px;
+        border-radius: 4px;
+        display: none;
+      }
+
+      .success {
+        background: #27ae60;
+      }
+
+      .error {
+        background: #c0392b;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Dashboard Configuration</h2>
+      <form id="configForm">
+        <div class="form-group">
+          <label>Pair Address <span class="required">*</span></label>
+          <input
+            type="text"
+            id="pairAddress"
+            required
+            placeholder="e.g. CtFWU65jGuHrLhQHPACrCZEerc31Y75M8tGvbBpzf9w4"
+          />
+        </div>
+
+        <div class="form-group">
+          <label>Community ID <span class="required">*</span></label>
+          <input
+            type="text"
+            id="communityId"
+            required
+            placeholder="e.g. 1972677938530394294"
+          />
+        </div>
+
+        <div class="form-group">
+          <label>X Headers <span class="optional">(optional)</span></label>
+          <textarea
+            id="xHeaders"
+            placeholder="Paste your X headers object here..."
+          ></textarea>
+        </div>
+
+        <button type="submit">Start Dashboard</button>
+      </form>
+      <div id="status"></div>
+    </div>
+
+    <script>
+      async function submitHeaders() {
+        const statusDiv = document.getElementById("status");
+
+        try {
+          // First check if backend is running
+          try {
+            const healthCheck = await fetch(
+              "https://kluxback.onrender.com/api/status"
+            );
+            if (!healthCheck.ok) {
+              throw new Error("Backend not running");
+            }
+          } catch (error) {
+            // Backend not running - attempt to start it
+            statusDiv.className = "status";
+            statusDiv.style.display = "block";
+            statusDiv.textContent = "Starting backend server...";
+
+            // Using electron's child_process to start Bx.py
+            const startBackend = await fetch(
+              "https://kluxback.onrender.com/start-backend"
+            );
+
+            // Wait for backend to be ready
+            let attempts = 0;
+            while (attempts < 10) {
+              try {
+                await fetch("https://kluxback.onrender.com/api/status");
+                break;
+              } catch (e) {
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+                attempts++;
+              }
+            }
+          }
+
+          const headersText = document.getElementById("headersInput").value;
+
+          const response = await fetch(
+            "https://kluxback.onrender.com/api/config",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                headers: JSON.parse(headersText),
+              }),
+            }
+          );
+
+          if (response.ok) {
+            statusDiv.className = "success";
+            statusDiv.textContent =
+              "Configuration saved! Redirecting to dashboard...";
+
+            // Redirect to dashboard after successful config
+            setTimeout(() => {
+              window.location.href = "index.html";
+            }, 1500);
+          } else {
+            const error = await response.json();
+            statusDiv.className = "error";
+            statusDiv.textContent = `Error: ${
+              error.error || "Failed to update headers"
+            }`;
+          }
+        } catch (e) {
+          statusDiv.className = "error";
+          statusDiv.textContent = `Error: ${e.message}`;
+        }
+      }
+
+      // Add automatic backend check on page load
+      window.addEventListener("load", async () => {
+        try {
+          const response = await fetch(
+            "https://kluxback.onrender.com/api/status"
+          );
+          if (response.ok) {
+            console.log("Backend is running");
+          }
+        } catch (error) {
+          console.log("Backend not running, will start on form submission");
+        }
+      });
+
+      document
+        .getElementById("configForm")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const status = document.getElementById("status");
+
+          const config = {
+            pairAddress: document.getElementById("pairAddress").value,
+            communityId: document.getElementById("communityId").value,
+            headers: document.getElementById("xHeaders").value
+              ? JSON.parse(document.getElementById("xHeaders").value)
+              : null,
+          };
+
+          try {
+            const response = await fetch(
+              "https://kluxback.onrender.com/api/config",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(config),
+              }
+            );
+
+            if (response.ok) {
+              status.textContent =
+                "Configuration saved successfully! Redirecting...";
+              status.className = "success";
+              status.style.display = "block";
+              setTimeout(() => {
+                window.location.href = "index.html";
+              }, 2000);
+            } else {
+              const error = await response.json();
+              status.textContent = `Error: ${error.error}`;
+              status.className = "error";
+              status.style.display = "block";
+            }
+          } catch (error) {
+            status.textContent =
+              "Error: " + (error.message || "Failed to save configuration");
+            status.className = "error";
+            status.style.display = "block";
+          }
+        });
+    </script>
+  </body>
+</html>

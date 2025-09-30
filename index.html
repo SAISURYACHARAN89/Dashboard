@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Financial Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script
+      type="text/javascript"
+      src="https://s3.tradingview.com/tv.js"
+    ></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+      :root {
+        --primary-color: #2c3e50;
+        --secondary-color: #34495e;
+        --accent-color: #3498db;
+        --text-color: #ecf0f1;
+        --card-bg: rgba(255, 255, 255, 0.1);
+        --border-radius: 8px;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+
+      body {
+        background: linear-gradient(135deg, #1a2a3a, #2c3e50);
+        color: var(--text-color);
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .dashboard {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto auto 1fr;
+        gap: 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      .header {
+        grid-column: 1 / -1;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+
+      .header-controls {
+        display: flex;
+        gap: 15px;
+        align-items: center;
+      }
+
+      .download-btn {
+        background: #2ecc71;
+        color: white;
+        border: none;
+        padding: 8px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .download-btn:hover {
+        background: #27ae60;
+      }
+
+      .time-selector {
+        display: flex;
+        background: var(--card-bg);
+        border-radius: var(--border-radius);
+        padding: 5px;
+      }
+
+      .time-selector button {
+        background: none;
+        border: none;
+        color: var(--text-color);
+        padding: 8px 15px;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: background 0.3s;
+      }
+
+      .time-selector button.active {
+        background: var(--accent-color);
+      }
+
+      .card {
+        background: var(--card-bg);
+        border-radius: var(--border-radius);
+        padding: 15px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        backdrop-filter: blur(10px);
+        transition: transform 0.3s ease;
+      }
+
+      .card:hover {
+        transform: scale(1.02);
+      }
+
+      .top-left {
+        grid-column: 1;
+        grid-row: 2;
+        min-height: 200px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 1.2rem;
+      }
+
+      .top-right {
+        grid-column: 2;
+        grid-row: 2;
+        display: grid;
+        grid-template-rows: 1fr 1fr;
+        gap: 15px;
+      }
+
+      .metrics-bar {
+        grid-column: 1 / -1;
+        display: flex;
+        justify-content: space-around;
+        padding: 15px 0;
+        background: var(--card-bg);
+        border-radius: var(--border-radius);
+        margin: 10px 0;
+      }
+
+      .metric-item {
+        text-align: center;
+      }
+
+      .metric-value {
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin-bottom: 5px;
+      }
+
+      .metric-label {
+        font-size: 0.9rem;
+        opacity: 0.8;
+      }
+
+      .center-row {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 15px;
+        margin: 10px 0;
+      }
+
+      .bottom-row {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+
+      .chart-container {
+        position: relative;
+        height: 100%;
+        width: 100%;
+      }
+
+      .bubble-chart {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        padding: 10px;
+      }
+
+      .bubble {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.8rem;
+        cursor: move;
+        user-select: none;
+        transition: all 0.3s ease;
+      }
+
+      .bubble:hover {
+        transform: scale(1.15);
+        filter: brightness(1.2);
+      }
+
+      .bubble.dragging {
+        opacity: 0.5;
+        transform: scale(1.2);
+      }
+
+      .age-metrics {
+        display: flex;
+        justify-content: space-around;
+        margin-top: 10px;
+      }
+
+      .age-item {
+        text-align: center;
+      }
+
+      .comparison-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+      }
+
+      .comparison-bar {
+        width: 80%;
+        height: 40px;
+        background: #2c3e50;
+        border-radius: 20px;
+        overflow: hidden;
+        margin: 20px 0;
+        position: relative;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+
+      .bar-segment {
+        height: 100%;
+        display: inline-block;
+        transition: width 0.5s ease;
+      }
+
+      .segment-1 {
+        background: linear-gradient(90deg, #3498db, #2980b9);
+      }
+
+      .segment-2 {
+        background: linear-gradient(90deg, #e74c3c, #c0392b);
+      }
+
+      .comparison-labels {
+        display: flex;
+        justify-content: space-between;
+        width: 80%;
+        margin-top: 10px;
+      }
+
+      .comparison-label {
+        text-align: center;
+        font-size: 0.9rem;
+      }
+
+      .comparison-value {
+        font-weight: bold;
+        font-size: 1.1rem;
+        margin-top: 5px;
+      }
+
+      .status-indicator {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 8px;
+      }
+
+      .status-connected {
+        background: #2ecc71;
+        animation: pulse 2s infinite;
+      }
+
+      .status-disconnected {
+        background: #e74c3c;
+      }
+
+      @keyframes pulse {
+        0% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+        100% {
+          opacity: 1;
+        }
+      }
+
+      @media (max-width: 768px) {
+        .dashboard {
+          grid-template-columns: 1fr;
+        }
+
+        .top-left,
+        .top-right,
+        .center-row,
+        .bottom-row {
+          grid-column: 1;
+        }
+
+        .center-row {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="dashboard">
+      <div class="header">
+        <h1>
+          <span class="status-indicator" id="statusIndicator"></span>
+          Financial Dashboard
+        </h1>
+        <div class="header-controls">
+          <button onclick="downloadData()" class="download-btn">
+            📥 Download Data
+          </button>
+          <div class="time-selector">
+            <button class="active">1M</button>
+            <button>5M</button>
+            <button>15M</button>
+            <button>30M</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card top-left" id="tradingview_chart">
+        <!-- TradingView Chart will be rendered here -->
+      </div>
+
+      <div class="card top-right">
+        <div class="chart-container">
+          <canvas id="trendChart1"></canvas>
+        </div>
+        <div class="chart-container">
+          <canvas id="trendChart2"></canvas>
+        </div>
+      </div>
+
+      <div class="metrics-bar card">
+        <div class="metric-item">
+          <div class="metric-value" id="metricTop10">0%</div>
+          <div class="metric-label">Top10</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-value" id="metricInside">0%</div>
+          <div class="metric-label">Inside</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-value" id="metricBundle">0%</div>
+          <div class="metric-label">Bundle</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-value" id="metricDex">-</div>
+          <div class="metric-label">DEX</div>
+        </div>
+      </div>
+
+      <div class="center-row">
+        <div class="card">
+          <div class="chart-container">
+            <canvas id="viewsChart"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="chart-container">
+            <canvas id="likesChart"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="bubble-chart" id="bubbleChart">
+            <!-- Bubble faces will be generated here by JS -->
+          </div>
+          <div class="age-metrics">
+            <div class="age-item">
+              <div class="metric-value">15</div>
+              <div class="metric-label">Old</div>
+            </div>
+            <div class="age-item">
+              <div class="metric-value">36</div>
+              <div class="metric-label">Medium</div>
+            </div>
+            <div class="age-item">
+              <div class="metric-value">16</div>
+              <div class="metric-label">New</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bottom-row">
+        <div class="card">
+          <div class="comparison-container">
+            <h3>Community Engagement</h3>
+            <div class="chart-container">
+              <canvas id="communityChart"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="chart-container">
+            <canvas id="scatterChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Global variables for charts and data
+      let charts = {
+        viewsChart: null,
+        likesChart: null,
+        trendChart1: null,
+        trendChart2: null,
+        communityChart: null,
+        scatterChart: null,
+      };
+
+      let chartData = {
+        views: Array(20).fill(0),
+        likes: Array(20).fill(0),
+        holders: Array(20).fill(0),
+        buyVolume: Array(20).fill(0),
+        sellVolume: Array(20).fill(0),
+        memberCount: Array(20).fill(0),
+        uniqueAuthors: Array(20).fill(0),
+        timestamps: Array(20).fill(""),
+      };
+
+      let lastUpdateTime = Date.now();
+      const updateInterval = 1000; // 1 second updates
+
+      // Initialize all charts when the page loads
+      document.addEventListener("DOMContentLoaded", function () {
+        // Time selector functionality
+        const timeButtons = document.querySelectorAll(".time-selector button");
+        timeButtons.forEach((button) => {
+          button.addEventListener("click", function () {
+            timeButtons.forEach((btn) => btn.classList.remove("active"));
+            this.classList.add("active");
+            updateCharts(this.textContent);
+          });
+        });
+
+        // Initialize TradingView widget
+        const container = document.getElementById("tradingview_chart");
+        if (container.firstChild) {
+          container.innerHTML = "";
+        }
+
+        new TradingView.widget({
+          autosize: true,
+          symbol: "BINANCE:BTCUSDT",
+          interval: "D",
+          timezone: "Etc/UTC",
+          theme: "dark",
+          style: "1",
+          locale: "en",
+          enable_publishing: false,
+          allow_symbol_change: true,
+          hide_top_toolbar: false,
+          withdateranges: true,
+          calendar: true,
+          toolbar_bg: "#0d1117",
+          hide_legend: false,
+          hide_side_toolbar: false,
+          container_id: "tradingview_chart",
+        });
+
+        // Initialize charts with empty data
+        initViewsChart();
+        initLikesChart();
+        initTrendChart1();
+        initTrendChart2();
+        initScatterChart();
+        initCommunityChart();
+        initBubbleChart();
+
+        // Connect WebSocket
+        connectWebSocket();
+
+        // Fetch initial data
+        fetchInitialData();
+
+        // Start real-time updates
+        initializeRealtimeUpdates();
+      });
+
+      function connectWebSocket() {
+        const socket = io("https://kluxback.onrender.com", {
+          transports: ["websocket"],
+          reconnection: true,
+          reconnectionDelay: 1000,
+          reconnectionAttempts: Infinity,
+        });
+
+        const statusIndicator = document.getElementById("statusIndicator");
+
+        socket.on("connect", () => {
+          console.log("✅ Connected to WebSocket");
+          statusIndicator.className = "status-indicator status-connected";
+        });
+
+        socket.on("disconnect", () => {
+          console.log("❌ Disconnected from WebSocket");
+          statusIndicator.className = "status-indicator status-disconnected";
+        });
+
+        socket.on("data_update", (data) => {
+          console.log("📊 Received real-time update");
+          updateChartsWithNewData(data);
+        });
+
+        // Start auto-update regardless of socket state
+        startAutoUpdate();
+
+        return socket;
+      }
+
+      // Update the updateChartsWithNewData function to handle new data
+      // Update the updateChartsWithNewData function to handle author followers data
+      function updateChartsWithNewData(data) {
+        if (!data) return;
+
+        lastUpdateTime = Date.now(); // Track last real data update
+
+        const timestamp = new Date(data.timestamp).toLocaleTimeString();
+        const axiomData = data.axiom;
+        const xData = data.x_data;
+
+        // Calculate totals from timeline
+        let totalViews = 0;
+        let totalLikes = 0;
+        let memberCount = 0;
+
+        if (xData && xData.timeline && Array.isArray(xData.timeline)) {
+          xData.timeline.forEach((tweet) => {
+            totalViews += parseInt(tweet.views || 0);
+            totalLikes += parseInt(tweet.favorite_count || 0);
+          });
+        }
+
+        // Get member count from fetchOne data
+        if (xData && xData.fetchOne) {
+          memberCount = xData.fetchOne.member_count || 0;
+        }
+
+        // Shift arrays and add new data
+        chartData.timestamps = [...chartData.timestamps.slice(1), timestamp];
+        chartData.views = [...chartData.views.slice(1), totalViews];
+        chartData.likes = [...chartData.likes.slice(1), totalLikes];
+        chartData.holders = [
+          ...chartData.holders.slice(1),
+          axiomData?.numHolders || 0,
+        ];
+        chartData.buyVolume = [
+          ...chartData.buyVolume.slice(1),
+          axiomData?.buyVolumeSol || 0,
+        ];
+        chartData.sellVolume = [
+          ...chartData.sellVolume.slice(1),
+          axiomData?.sellVolumeSol || 0,
+        ];
+        chartData.memberCount = [
+          ...chartData.memberCount.slice(1),
+          memberCount,
+        ];
+        chartData.uniqueAuthors = [
+          ...chartData.uniqueAuthors.slice(1),
+          data.unique_authors || 0,
+        ];
+
+        // Update metrics bar
+        updateMetricsBar(axiomData);
+
+        // Update scatter plot with unique authors followers data
+        updateScatterPlot(data.author_followers || []);
+
+        // Update bubble chart with wallet age data
+        updateBubbleChart(
+          axiomData?.walletAgeCounts || { baby: 0, adult: 0, old: 0 }
+        );
+
+        // Update all charts
+        updateAllCharts();
+      }
+
+      // New function to update scatter plot with unique authors and their followers
+      function updateScatterPlot(authorFollowers) {
+        if (!charts.scatterChart) return;
+
+        // Get unique authors (remove duplicates by author screen name)
+        const uniqueAuthorsMap = new Map();
+
+        authorFollowers.forEach((author) => {
+          if (author.author && !uniqueAuthorsMap.has(author.author)) {
+            uniqueAuthorsMap.set(author.author, author);
+          }
+        });
+
+        const uniqueAuthors = Array.from(uniqueAuthorsMap.values());
+
+        console.log(
+          `📊 Scatter Plot: ${uniqueAuthors.length} unique authors with followers data`
+        );
+
+        // Prepare scatter plot data - each unique author is a point
+        const scatterData = uniqueAuthors.map((author, index) => ({
+          x: index + 1, // Position on x-axis (author index)
+          y: author.followers || 0, // Followers count on y-axis
+          author: author.author,
+          author_name: author.author_name || author.author,
+          followers: author.followers || 0,
+        }));
+
+        // Update chart data
+        charts.scatterChart.data.datasets[0].data = scatterData;
+
+        // Update chart options to show author names on x-axis
+        charts.scatterChart.options.scales.x.ticks.callback = function (value) {
+          const point = scatterData.find((p) => p.x === value);
+          return point ? point.author_name : "";
+        };
+
+        charts.scatterChart.update();
+
+        // Log for debugging
+        if (uniqueAuthors.length > 0) {
+          console.log(
+            "👥 Unique authors in scatter plot:",
+            uniqueAuthors.map(
+              (a) => `${a.author_name}: ${a.followers} followers`
+            )
+          );
+        }
+      }
+
+      // Update the initScatterChart function for author followers
+      function initScatterChart() {
+        const ctx = document.getElementById("scatterChart").getContext("2d");
+
+        charts.scatterChart = new Chart(ctx, {
+          type: "scatter",
+          data: {
+            datasets: [
+              {
+                label: "Author Followers",
+                data: [],
+                backgroundColor: "rgba(155, 89, 182, 0.7)", // Purple color
+                pointRadius: 6,
+                pointHoverRadius: 8,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: false,
+              },
+              title: {
+                display: true,
+                text: "Author Followers Distribution",
+                color: "#ecf0f1",
+                font: {
+                  size: 16,
+                  weight: "bold",
+                },
+              },
+              tooltip: {
+                callbacks: {
+                  label: function (context) {
+                    const point = context.raw;
+                    return [
+                      `Author: ${point.author_name}`,
+                      `Handle: @${point.author}`,
+                      `Followers: ${point.y.toLocaleString()}`,
+                    ];
+                  },
+                },
+              },
+            },
+            scales: {
+              y: {
+                title: {
+                  display: true,
+                  text: "Followers Count",
+                  color: "#ecf0f1",
+                },
+                grid: {
+                  color: "rgba(255, 255, 255, 0.1)",
+                },
+                ticks: {
+                  color: "#ecf0f1",
+                  callback: function (value) {
+                    return value.toLocaleString();
+                  },
+                },
+              },
+              x: {
+                title: {
+                  display: true,
+                  text: "Authors",
+                  color: "#ecf0f1",
+                },
+                grid: {
+                  color: "rgba(255, 255, 255, 0.1)",
+                },
+                ticks: {
+                  color: "#ecf0f1",
+                  maxTicksLimit: 10, // Limit number of labels to avoid crowding
+                },
+              },
+            },
+          },
+        });
+      }
+
+      // Update bubble chart function (keep your existing one, just adding for completeness)
+      function updateBubbleChart(walletAgeCounts) {
+        const bubbleContainer = document.getElementById("bubbleChart");
+
+        // Clear existing bubbles
+        bubbleContainer.innerHTML = "";
+
+        const emojiMap = {
+          baby: "🧒",
+          adult: "🧑",
+          old: "🧓",
+          unknown: "❓",
+        };
+
+        const colorMap = {
+          baby: "#FF6B6B", // Red
+          adult: "#4ECDC4", // Teal
+          old: "#45B7D1", // Blue
+          unknown: "#96CEB4", // Green
+        };
+
+        // Create bubbles based on wallet age counts
+        let bubbleIndex = 0;
+        const maxBubbles = 15;
+
+        Object.entries(walletAgeCounts).forEach(([ageCategory, count]) => {
+          // Limit the number of bubbles to maxBubbles while maintaining proportions
+          const displayCount = Math.min(count, Math.ceil(maxBubbles / 3));
+          for (let i = 0; i < displayCount && bubbleIndex < maxBubbles; i++) {
+            const bubble = document.createElement("div");
+            bubble.className = "bubble";
+            bubble.textContent = emojiMap[ageCategory] || "❓";
+            bubble.style.backgroundColor = colorMap[ageCategory] || "#96CEB4";
+            bubble.title = `${
+              ageCategory.charAt(0).toUpperCase() + ageCategory.slice(1)
+            } wallet`;
+            bubble.draggable = true;
+
+            // Add drag events
+            bubble.addEventListener("dragstart", (e) => {
+              bubble.classList.add("dragging");
+              e.dataTransfer.setData("text/plain", bubble.textContent);
+            });
+
+            bubble.addEventListener("dragend", () => {
+              bubble.classList.remove("dragging");
+            });
+
+            bubbleContainer.appendChild(bubble);
+            bubbleIndex++;
+          }
+        });
+
+        // Update age metrics display
+        updateAgeMetrics(walletAgeCounts);
+      }
+
+      function updateAgeMetrics(walletAgeCounts) {
+        const oldElement = document.querySelector(
+          ".age-metrics .age-item:nth-child(1) .metric-value"
+        );
+        const adultElement = document.querySelector(
+          ".age-metrics .age-item:nth-child(2) .metric-value"
+        );
+        const babyElement = document.querySelector(
+          ".age-metrics .age-item:nth-child(3) .metric-value"
+        );
+
+        if (oldElement) oldElement.textContent = walletAgeCounts.old || 0;
+        if (adultElement) adultElement.textContent = walletAgeCounts.adult || 0;
+        if (babyElement) babyElement.textContent = walletAgeCounts.baby || 0;
+      }
+      // Update the initBubbleChart function to start empty
+      function initBubbleChart() {
+        const bubbleContainer = document.getElementById("bubbleChart");
+        bubbleContainer.innerHTML = "";
+
+        // Initialize with empty data
+        updateBubbleChart({ baby: 0, adult: 0, old: 0 });
+      }
+      // Add auto-update function
+      function startAutoUpdate() {
+        setInterval(() => {
+          fetch("https://kluxback.onrender.com/api/data/latest")
+            .then((response) => {
+              if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+              }
+              return response.json();
+            })
+            .then((data) => {
+              updateChartsWithNewData(data);
+            })
+            .catch((error) => console.error("Auto-update failed:", error));
+        }, 5000); // Update every 5 seconds
+      }
+
+      // Add new function to update all charts
+      function updateAllCharts() {
+        Object.keys(charts).forEach((chartKey) => {
+          const chart = charts[chartKey];
+          if (!chart) return;
+
+          chart.data.labels = chartData.timestamps;
+
+          switch (chartKey) {
+            case "viewsChart":
+              chart.data.datasets[0].data = chartData.views;
+              break;
+            case "likesChart":
+              chart.data.datasets[0].data = chartData.likes;
+              break;
+            case "trendChart1":
+              chart.data.datasets[0].data = chartData.holders;
+              break;
+            case "trendChart2":
+              chart.data.datasets[0].data = chartData.buyVolume;
+              chart.data.datasets[1].data = chartData.sellVolume;
+              break;
+            case "communityChart":
+              chart.data.datasets[0].data = chartData.memberCount;
+              chart.data.datasets[1].data = chartData.uniqueAuthors;
+              break;
+          }
+
+          chart.update("none");
+        });
+      }
+
+      function updateMetricsBar(axiomData) {
+        if (!axiomData) return;
+
+        document.getElementById("metricTop10").textContent = `${(
+          axiomData.top10HoldersPercent || 0
+        ).toFixed(1)}%`;
+        document.getElementById("metricInside").textContent = `${(
+          axiomData.insidersHoldPercent || 0
+        ).toFixed(1)}%`;
+        document.getElementById("metricBundle").textContent = `${(
+          axiomData.bundlersHoldPercent || 0
+        ).toFixed(1)}%`;
+        document.getElementById("metricDex").textContent = axiomData.dexPaid
+          ? "PAID"
+          : "FREE";
+      }
+
+      function getDefaultChartOptions(title) {
+        return {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            title: {
+              display: true,
+              text: title,
+              color: "#ecf0f1",
+              font: { size: 16, weight: "bold" },
+            },
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: { color: "rgba(255, 255, 255, 0.1)" },
+              ticks: {
+                color: "#ecf0f1",
+                callback: (value) => value.toLocaleString(),
+              },
+            },
+            x: {
+              grid: { color: "rgba(255, 255, 255, 0.1)" },
+              ticks: { color: "#ecf0f1", maxTicksLimit: 6 },
+            },
+          },
+          animation: {
+            duration: 750,
+            easing: "linear",
+          },
+          transitions: {
+            active: {
+              animation: {
+                duration: 750,
+              },
+            },
+          },
+          elements: {
+            line: {
+              tension: 0.4,
+            },
+          },
+        };
+      }
+
+      function initViewsChart() {
+        const ctx = document.getElementById("viewsChart").getContext("2d");
+        charts.viewsChart = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels: chartData.timestamps,
+            datasets: [
+              {
+                label: "Post Views",
+                data: chartData.views,
+                borderColor: "#9b59b6",
+                backgroundColor: "rgba(155, 89, 182, 0.1)",
+                tension: 0.4,
+                fill: true,
+              },
+            ],
+          },
+          options: {
+            ...getDefaultChartOptions("Post Views"),
+          },
+        });
+      }
+
+      function initLikesChart() {
+        const ctx = document.getElementById("likesChart").getContext("2d");
+        charts.likesChart = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels: chartData.timestamps,
+            datasets: [
+              {
+                label: "Total Likes",
+                data: chartData.likes,
+                borderColor: "#f1c40f",
+                backgroundColor: "rgba(241, 196, 15, 0.1)",
+                tension: 0.4,
+                fill: true,
+              },
+            ],
+          },
+          options: {
+            ...getDefaultChartOptions("Post Likes"),
+          },
+        });
+      }
+
+      function initTrendChart1() {
+        const ctx = document.getElementById("trendChart1").getContext("2d");
+        charts.trendChart1 = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels: chartData.timestamps,
+            datasets: [
+              {
+                label: "Number of Holders",
+                data: chartData.holders,
+                borderColor: "#2ecc71",
+                backgroundColor: "rgba(46, 204, 113, 0.1)",
+                tension: 0.4,
+                fill: true,
+              },
+            ],
+          },
+          options: {
+            ...getDefaultChartOptions("Token Holders"),
+          },
+        });
+      }
+
+      function initTrendChart2() {
+        const ctx = document.getElementById("trendChart2").getContext("2d");
+        charts.trendChart2 = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels: chartData.timestamps,
+            datasets: [
+              {
+                label: "Buy Volume",
+                data: chartData.buyVolume,
+                borderColor: "#2ecc71",
+                backgroundColor: "rgba(46, 204, 113, 0.1)",
+                tension: 0.4,
+                fill: true,
+              },
+              {
+                label: "Sell Volume",
+                data: chartData.sellVolume,
+                borderColor: "#e74c3c",
+                backgroundColor: "rgba(231, 76, 60, 0.1)",
+                tension: 0.4,
+                fill: true,
+              },
+            ],
+          },
+          options: {
+            ...getDefaultChartOptions("Buy/Sell Volume (SOL)"),
+            plugins: {
+              legend: {
+                labels: {
+                  color: "#ecf0f1",
+                },
+              },
+            },
+          },
+        });
+      }
+
+      function initCommunityChart() {
+        const ctx = document.getElementById("communityChart").getContext("2d");
+        charts.communityChart = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: chartData.timestamps,
+            datasets: [
+              {
+                label: "Total Members",
+                data: chartData.memberCount,
+                backgroundColor: "#3498db",
+                borderColor: "#2980b9",
+                borderWidth: 1,
+              },
+              {
+                label: "Unique Authors",
+                data: chartData.uniqueAuthors,
+                backgroundColor: "#9b59b6",
+                borderColor: "#8e44ad",
+                borderWidth: 1,
+              },
+            ],
+          },
+          options: {
+            ...getDefaultChartOptions("Community Engagement"),
+            scales: {
+              y: {
+                stacked: true,
+                grid: {
+                  color: "rgba(255, 255, 255, 0.1)",
+                },
+                ticks: {
+                  color: "#ecf0f1",
+                  beginAtZero: true,
+                },
+              },
+              x: {
+                stacked: true,
+                grid: {
+                  color: "rgba(255, 255, 255, 0.1)",
+                },
+                ticks: {
+                  color: "#ecf0f1",
+                  maxTicksLimit: 6,
+                },
+              },
+            },
+          },
+        });
+      }
+
+      function initScatterChart() {
+        const ctx = document.getElementById("scatterChart").getContext("2d");
+
+        // Generate initial random data for scatter plot
+        const data = [];
+        for (let i = 0; i < 30; i++) {
+          data.push({
+            x: Math.random() * 100,
+            y: Math.random() * 100,
+          });
+        }
+
+        charts.scatterChart = new Chart(ctx, {
+          type: "scatter",
+          data: {
+            datasets: [
+              {
+                label: "Unique Authors Followers",
+                data: data,
+                backgroundColor: "rgba(52, 152, 219, 0.7)",
+                pointRadius: 5,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: false,
+              },
+              title: {
+                display: true,
+                text: "Unique Authors Followers",
+                color: "#ecf0f1",
+                font: {
+                  size: 16,
+                  weight: "bold",
+                },
+              },
+            },
+            scales: {
+              y: {
+                grid: {
+                  color: "rgba(255, 255, 255, 0.1)",
+                },
+                ticks: {
+                  color: "#ecf0f1",
+                },
+              },
+              x: {
+                grid: {
+                  color: "rgba(255, 255, 255, 0.1)",
+                },
+                ticks: {
+                  color: "#ecf0f1",
+                },
+              },
+            },
+          },
+        });
+      }
+
+      function initBubbleChart() {
+        const bubbleContainer = document.getElementById("bubbleChart");
+
+        // Clear existing bubbles
+        bubbleContainer.innerHTML = "";
+
+        const emojis = ["🧒🏻", "🧒🏿", "🧒🏽", "🧑🏻", "🧑🏿", "🧑🏽", "🧓🏻", "🧓🏿", "🧓🏽"];
+
+        // Create bubbles with drag functionality
+        for (let i = 0; i < 15; i++) {
+          const bubble = document.createElement("div");
+          bubble.className = "bubble";
+          bubble.textContent =
+            emojis[Math.floor(Math.random() * emojis.length)];
+          bubble.style.backgroundColor = `hsl(${
+            Math.random() * 360
+          }, 70%, 60%)`;
+          bubble.draggable = true;
+
+          // Add drag events
+          bubble.addEventListener("dragstart", (e) => {
+            bubble.classList.add("dragging");
+            e.dataTransfer.setData("text/plain", bubble.textContent);
+          });
+
+          bubble.addEventListener("dragend", () => {
+            bubble.classList.remove("dragging");
+          });
+
+          bubbleContainer.appendChild(bubble);
+        }
+      }
+
+      // Fallback: Fetch initial data from REST API
+      async function fetchInitialData() {
+        try {
+          const response = await fetch("https://kluxback.onrender.com/api/data");
+          if (response.ok) {
+            const data = await response.json();
+            updateChartsWithNewData(data);
+          }
+        } catch (error) {
+          console.error("Failed to fetch initial data:", error);
+        }
+      }
+
+      // Time selector update function
+      function updateCharts(timeframe) {
+        console.log(`Updating charts for timeframe: ${timeframe}`);
+        // This function would typically fetch data for the selected timeframe
+        // For now, we'll just refresh the data
+        fetchInitialData();
+      }
+
+      function initializeRealtimeUpdates() {
+        setInterval(() => {
+          // Update timestamps
+          const now = new Date();
+          const timeString = now.toLocaleTimeString();
+          chartData.timestamps = [...chartData.timestamps.slice(1), timeString];
+
+          // If no new data in last 5 seconds, simulate small random changes
+          if (Date.now() - lastUpdateTime > 5000) {
+            // Add slight random variations to last values for smooth animation
+            Object.keys(chartData).forEach((key) => {
+              if (Array.isArray(chartData[key]) && key !== "timestamps") {
+                const lastValue =
+                  chartData[key][chartData[key].length - 1] || 0;
+                const variation = lastValue * 0.02; // 2% variation
+                const newValue = lastValue + (Math.random() - 0.5) * variation;
+                chartData[key] = [
+                  ...chartData[key].slice(1),
+                  Math.max(0, newValue),
+                ];
+              }
+            });
+          }
+
+          // Update all charts with new data
+          updateAllCharts();
+        }, updateInterval);
+      }
+
+      async function downloadData() {
+        try {
+          const response = await fetch("https://kluxback.onrender.com/api/download");
+          if (!response.ok) throw new Error("Download failed");
+
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `trading_data_${
+            new Date().toISOString().split("T")[0]
+          }.json`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        } catch (error) {
+          console.error("Download failed:", error);
+          alert("Failed to download data");
+        }
+      }
+    </script>
+  </body>
+</html>
